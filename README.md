@@ -1,28 +1,22 @@
-# 🛡️ Advanced-Hunting
+🛡️ Advanced-Hunting
+Advanced Threat Hunting & Detection Engineering using Kusto Query Language (KQL)
+📖 Overview
 
-> **Advanced Threat Hunting & Detection Engineering using Kusto Query Language (KQL)**
-
----
-
-## 📖 Overview
-
-This repository contains a curated collection of **Kusto Query Language (KQL)** queries developed for use with **Microsoft Defender XDR Advanced Hunting**, **Microsoft Sentinel**, and related security monitoring platforms.
+This repository contains a curated collection of Kusto Query Language (KQL) queries developed for use with Microsoft Defender XDR Advanced Hunting, Microsoft Sentinel, and related security monitoring platforms.
 
 The queries are designed to support:
 
-* 🔍 Proactive Threat Hunting
-* 🚨 Incident Investigation
-* 🧠 Detection Engineering
-* 🛠️ Security Operations (SOC) Activities
-* 📊 Security Analytics & Visibility
+🔍 Proactive Threat Hunting
+🚨 Incident Investigation
+🧠 Detection Engineering
+🛠️ Security Operations Center (SOC) Activities
+📊 Security Analytics & Visibility
 
-The primary objective of this repository is to help identify and investigate advanced threats, including previously unknown attack patterns and zero-day activity that may bypass traditional signature-based security controls.
+The primary objective of this repository is to help identify, investigate, and respond to advanced threats, including emerging attack techniques, exploitation attempts, and suspicious behaviors that may bypass traditional signature-based security controls.
 
----
+🎯 Detection Focus Areas
 
-## 🎯 Detection Focus Areas
-
-This repository includes detections and hunting queries related to:
+This repository includes detection rules and hunting queries related to:
 
 💥 Zero-Day Exploitation & Emerging Threat Detection
 🌐 Vulnerable Internet-Facing Applications & PHP Exploitation
@@ -35,76 +29,68 @@ This repository includes detections and hunting queries related to:
 👤 Abnormal Identity, Endpoint & Process Activity
 🚫 Defense Evasion & Anti-Forensics Techniques
 📉 Security Hygiene, Vulnerability Exposure & Misconfiguration Detection
-
----
-
-## 🧪 Included Detection Scenarios
+🧪 Included Detection Scenarios
 
 Current detection examples include:
 
-| Detection Name                              | Description                                                          |
-| ------------------------------------------- | -------------------------------------------------------------------- |
-| 🔵 **BlueHammer Detection**                 | Detects indicators and behaviors associated with BlueHammer activity |
-| 🔴 **RedSun Detection**                     | Hunting queries for RedSun-related attack patterns                   |
-| 🔴 **RoguePlanet**                          | CVE-2026-50656 / RoguePlanet hunting query                          |
-| 🖥️ **Devices Missing Weekly Full AV Scan** | Identifies endpoints that missed scheduled antivirus full scans      |
-| ⚠️ **Suspicious Process Execution**         | Detects abnormal or high-risk process behaviors                      |
-| 📜 **Abnormal PowerShell Activity**         | Identifies encoded, obfuscated, or suspicious PowerShell usage       |
-| 🔑 **Persistence Mechanism Detection**      | Detects registry, startup, and scheduled task persistence methods    |
-| 🧬 **Endpoint Anomaly Hunting**             | Queries for unusual endpoint behaviors and anomalies                 |
+Detection Name	Description
+🔵 BlueHammer Detection	Detects indicators and behaviors associated with BlueHammer activity.
+🔴 RedSun Detection	Hunting queries for RedSun-related attack patterns.
+🔴 RoguePlanet Detection	CVE-2026-50656 / RoguePlanet hunting query.
+🌐 PHP Vulnerability & Shell-Spawning Hunt	Identifies potentially vulnerable PHP versions on internet-facing devices and hunts for suspicious shell processes launched by web-server or PHP-related processes.
+🖥️ Devices Missing Weekly Full AV Scan	Identifies endpoints that missed scheduled antivirus full scans.
+⚠️ Suspicious Process Execution	Detects abnormal or high-risk process behaviors.
+📜 Abnormal PowerShell Activity	Identifies encoded, obfuscated, or suspicious PowerShell usage.
+🔑 Persistence Mechanism Detection	Detects registry, startup, and scheduled-task persistence methods.
+🧬 Endpoint Anomaly Hunting	Queries for unusual endpoint behaviors and anomalies.
 
----
+Detection coverage depends on available telemetry, query logic, product configuration, and the environment being monitored. Hunting results require investigation and should not automatically be treated as confirmation of compromise.
 
-## 🎯 Repository Goals
+🎯 Repository Goals
 
 The purpose of this repository is to:
 
-* ✅ Provide reusable and production-ready hunting queries
-* 🧠 Support SOC analysts, DFIR teams, and threat hunters
-* 📈 Improve detection coverage across Microsoft security platforms
-* ⚡ Accelerate investigation and response workflows
-* 🔬 Share practical detection engineering techniques
-* 🔄 Continuously evolve against emerging threats and attacker tradecraft
+✅ Provide reusable and adaptable hunting queries
+🧠 Support SOC analysts, DFIR teams, and threat hunters
+📈 Improve detection coverage across Microsoft security platforms
+⚡ Accelerate investigation and response workflows
+🔬 Share practical detection engineering techniques
+🔄 Continuously evolve detections against emerging threats and attacker tradecraft
+🧰 Technologies & Platforms
+🛡️ Microsoft Defender XDR Advanced Hunting
+☁️ Microsoft Sentinel
+📘 Kusto Query Language (KQL)
+🚀 Usage
 
----
+Queries can be used or adapted within supported environments, including:
 
-## 🧰 Technologies & Platforms
+Microsoft Defender XDR Advanced Hunting
+Microsoft Sentinel Logs and analytics workflows
+Microsoft Defender XDR custom detection rules, where the query meets the platform's requirements
+Scheduled analytics rules in Microsoft Sentinel
+Threat hunting and incident investigation workflows
 
-* 🛡️ Microsoft Defender XDR Advanced Hunting
-* ☁️ Microsoft Sentinel
-* 📘 Kusto Query Language (KQL)
+Before deploying a query as a scheduled or custom detection rule, validate its schema compatibility, execution requirements, performance, and alerting behavior in your environment.
 
----
+Queries may need to be modified to account for differences in data sources, table schemas, retention periods, permissions, and security configurations.
 
-## 🚀 Usage
-
-Each query can be executed directly within:
-
-* Microsoft Defender Advanced Hunting Portal
-* Microsoft Sentinel Logs & Analytics
-* Custom Detection Rules
-* Scheduled Analytics Rules
-* Threat Hunting Workflows
-
-Queries can also be modified and adapted to fit organizational requirements and detection strategies.
-
----
-
-## 🤝 Contribution & Improvements
+🤝 Contribution & Improvements
 
 This repository will continue to expand with:
 
-* ➕ New detection scenarios
-* ⚙️ Query optimizations
-* 🧩 MITRE ATT&CK mappings
-* 🧠 Advanced threat hunting techniques
-* 📚 Detection engineering use cases
+➕ New detection scenarios and threat hunts
+⚙️ Query optimization and performance improvements
+🧩 MITRE ATT&CK technique mappings
+🧠 Advanced threat hunting methodologies
+📚 Practical detection engineering use cases
+🔍 Investigation guidance and false-positive tuning
 
-Contributions, improvements, and detection ideas are always welcome.
+Contributions, improvements, and new detection ideas are welcome.
 
----
+📌 Disclaimer
 
-## 📌 Disclaimer
+These queries are provided for defensive security research, threat hunting, incident investigation, and detection engineering purposes only.
 
-These queries are provided for research, detection engineering, and defensive security purposes only.
-Always validate and test detections in your environment before deploying them into production workflows.
+They are shared as starting points for security analysis and are not guaranteed to detect every variant of a threat or attack technique.
+
+Always validate and test queries against your environment before using them in production. Review detection results, tune for false positives, and confirm that required telemetry is available before enabling automated alerts or response actions.
