@@ -1,0 +1,171 @@
+// =============================================================================
+// Title: Internet-Facing Vulnerable PHP and Web-Worker Shell Spawn Hunt
+// =============================================================================
+//
+// Description:
+// Identifies Internet-facing devices observed running PHP versions below the
+// configured fixed release for each supported PHP branch. It then searches
+// those devices for shell or script-interpreter processes spawned by PHP or
+// common web-server worker processes.
+//
+// IMPORTANT:
+// Run the ENTIRE query. The final hunting logic depends on constants and
+// tabular expressions defined by the preceding "let" statements.
+//
+// Interpretation:
+// - "Vulnerable" means the observed PHP version is below the configured fixed
+//   release for its branch.
+// - "UnknownVersion" means the PHP version could not be parsed reliably.
+// - A result is an investigation lead, not proof of exploitation.
+// - Validate package and vendor patch status before declaring a device
+//   vulnerable. Vendors may backport fixes without adopting the corresponding
+//   upstream PHP version number.
+// - Confirm suspicious activity using process ancestry, command lines,
+//   file activity, network connections, and other endpoint telemetry.
+//
+// Compatibility:
+// - Platform: Microsoft Defender XDR Advanced Hunting
+// - Required tables: DeviceInfo, DeviceProcessEvents
+// - Required DeviceInfo fields: Timestamp, DeviceId, IsInternetFacing, PublicIP
+// - Required DeviceProcessEvents fields include PHP version metadata and
+//   process creation telemetry.
+//
+// Configured minimum fixed releases:
+// - PHP 8.2: 8.2.35
+// - PHP 8.3: 8.3.36
+// - PHP 8.4: 8.4.27
+// - PHP 8.5: 8.5.12
+//
+// Author: Rami Mustafa
+// Last updated: 2026-10-22
+// =============================================================================
+let Lookback = 30d;
+let PHP_82_Minimum = parse_version("8.2.0");
+let PHP_82_Fixed = parse_version("8.2.35");
+let PHP_83_Minimum = parse_version("8.3.0");
+let PHP_83_Fixed = parse_version("8.3.36");
+let PHP_84_Minimum = parse_version("8.4.0");
+let PHP_84_Fixed = parse_version("8.4.27");
+let PHP_85_Minimum = parse_version("8.5.0");
+let PHP_85_Fixed = parse_version("8.5.12");
+let ShellProcesses = dynamic([
+    "sh",
+    "zsh",
+    "dash",
+    "bash",
+    "bash.exe",
+    "cmd.exe",
+    "powershell.exe",
+    "powershell",
+    "pwsh.exe",
+    "pwsh",
+    "node.exe",
+    "node"
+]);
+let WebProcesses = dynamic([
+    "php",
+    "php.exe",
+    "php-win.exe",
+    "php-cgi",
+    "php-cgi.exe",
+    "w3wp.exe",
+    "httpd",
+    "httpd.exe",
+    "nginx",
+    "nginx.exe",
+    "apache2"
+]);
+let InternetFacingDevices =
+    DeviceInfo
+    | where Timestamp > ago(Lookback)
+    // Use the most recent DeviceInfo record for each device.
+    | summarize arg_max(Timestamp, *) by DeviceId
+    | where IsInternetFacing == true
+    | where isnotempty(PublicIP)
+    | project DeviceId, PublicIP;
+let PHPVersionObservations =
+    DeviceProcessEvents
+    | where Timestamp > ago(Lookback)
+    | where DeviceId in (InternetFacingDevices)
+    | where InitiatingProcessVersionInfoProductName =~ "PHP"
+    | where InitiatingProcessVersionInfoCompanyName =~ "The PHP Group"
+    | extend ObservedPHPVersion =
+        tostring(InitiatingProcessVersionInfoProductVersion)
+    | extend ParsedPHPVersion =
+        parse_version(ObservedPHPVersion)
+    | extend PHPVersionStatus =
+        case(
+            isnull(ParsedPHPVersion),
+                "UnknownVersion",
+            ParsedPHPVersion >= PHP_82_Minimum
+                and ParsedPHPVersion < PHP_82_Fixed,
+                "Vulnerable",
+            ParsedPHPVersion >= PHP_83_Minimum
+                and ParsedPHPVersion < PHP_83_Fixed,
+                "Vulnerable",
+            ParsedPHPVersion >= PHP_84_Minimum
+                and ParsedPHPVersion < PHP_84_Fixed,
+                "Vulnerable",
+            ParsedPHPVersion >= PHP_85_Minimum
+                and ParsedPHPVersion < PHP_85_Fixed,
+                "Vulnerable",
+            "NotMatched"
+        )
+    // Retain unknown versions for analyst validation.
+    | where PHPVersionStatus in ("Vulnerable", "UnknownVersion")
+    | summarize
+        LastPHPObservation = max(Timestamp),
+        ObservedPHPVersions = make_set(ObservedPHPVersion, 20),
+        PHPVersionStatuses = make_set(PHPVersionStatus, 5)
+        by DeviceId;
+PHPVersionObservations
+| join kind=inner (
+    InternetFacingDevices
+) on DeviceId
+| join kind=inner (
+    DeviceProcessEvents
+    | where Timestamp > ago(Lookback)
+    | where InitiatingProcessFileName in~ (WebProcesses)
+    | where FileName in~ (ShellProcesses)
+    | project
+        ShellSpawnTimestamp = Timestamp,
+        DeviceId,
+        DeviceName,
+        AccountDomain,
+        AccountName,
+        InitiatingProcessFileName,
+        InitiatingProcessCommandLine,
+        InitiatingProcessId,
+        InitiatingProcessParentFileName,
+        InitiatingProcessParentId,
+        SpawnedProcessFileName = FileName,
+        SpawnedProcessCommandLine = ProcessCommandLine,
+        SpawnedProcessId = ProcessId,
+        FolderPath,
+        SHA1,
+        ReportId
+) on DeviceId
+| project
+    ShellSpawnTimestamp,
+    DeviceName,
+    DeviceId,
+    PublicIP,
+    AccountDomain,
+    AccountName,
+    ObservedPHPVersions,
+    PHPVersionStatuses,
+    LastPHPObservation,
+    InitiatingProcessFileName,
+    InitiatingProcessCommandLine,
+    InitiatingProcessId,
+    InitiatingProcessParentFileName,
+    InitiatingProcessParentId,
+    SpawnedProcessFileName,
+    SpawnedProcessCommandLine,
+    SpawnedProcessId,
+    FolderPath,
+    SHA1,
+    ReportId
+| order by ShellSpawnTimestamp desc
+
+
