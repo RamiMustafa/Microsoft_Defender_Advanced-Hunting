@@ -36,7 +36,7 @@
 // - PHP 8.4: 8.4.27
 // - PHP 8.5: 8.5.12
 //
-// Author: Rami Mustafa
+// Author: Rami Mustafa, , Microsoft CSA (rami.mustafa@microsoft.com)
 // Last updated: 2026-10-22
 // =============================================================================
 let Lookback = 30d;
