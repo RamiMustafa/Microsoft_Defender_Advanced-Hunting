@@ -24,15 +24,17 @@ The primary objective of this repository is to help identify and investigate adv
 
 This repository includes detections and hunting queries related to:
 
-* 💥 Zero-Day Attack Detection
-* 🦠 Malware & Ransomware Activity
-* 🕵️ Living-off-the-Land (LotL) Techniques
-* 🔐 Persistence & Privilege Escalation
-* ⚡ Suspicious PowerShell & Script Execution
-* 🛡️ Microsoft Defender Tampering Attempts
-* 👤 Abnormal Identity & Endpoint Activity
-* 🚫 Security Evasion Techniques
-* 📉 Security Hygiene & Misconfiguration Detection
+💥 Zero-Day Exploitation & Emerging Threat Detection
+🌐 Vulnerable Internet-Facing Applications & PHP Exploitation
+🦠 Malware, Ransomware & Post-Exploitation Activity
+🕵️ Living-off-the-Land (LotL) Techniques
+🐚 Web Server Exploitation & Suspicious Shell Spawning
+🔐 Persistence, Privilege Escalation & Lateral Movement
+⚡ Suspicious PowerShell, Script & Command Execution
+🛡️ Microsoft Defender Tampering & Security Control Evasion
+👤 Abnormal Identity, Endpoint & Process Activity
+🚫 Defense Evasion & Anti-Forensics Techniques
+📉 Security Hygiene, Vulnerability Exposure & Misconfiguration Detection
 
 ---
 
