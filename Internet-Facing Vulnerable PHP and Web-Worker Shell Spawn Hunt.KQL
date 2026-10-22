@@ -38,6 +38,7 @@
 //
 // Author: Rami Mustafa, , Microsoft CSA (rami.mustafa@microsoft.com)
 // Last updated: 2026-10-22
+//Version     : 1.0
 // =============================================================================
 let Lookback = 30d;
 let PHP_82_Minimum = parse_version("8.2.0");
