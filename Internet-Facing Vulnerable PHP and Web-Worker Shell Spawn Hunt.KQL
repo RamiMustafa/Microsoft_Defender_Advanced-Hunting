@@ -1,68 +1,102 @@
 // =============================================================================
-// Title: Internet-Facing Vulnerable PHP and Web-Worker Shell Spawn Hunt
+// Title: Internet-Facing Affected PHP and Web-Worker Shell Spawn Hunt
 // =============================================================================
 //
 // Description:
-// Identifies Internet-facing devices observed running PHP versions below the
-// configured fixed release for each supported PHP branch. It then searches
-// those devices for shell or script-interpreter processes spawned by PHP or
-// common web-server worker processes.
+// Identifies Internet-facing devices observed running PHP versions associated
+// with the configured vulnerability version ranges. It then correlates those
+// devices with shell, scripting-engine, or suspicious utility processes
+// spawned by PHP or common web-server worker processes.
 //
 // IMPORTANT:
 // Run the ENTIRE query. The final hunting logic depends on constants and
 // tabular expressions defined by the preceding "let" statements.
 //
 // Interpretation:
-// - "Vulnerable" means the observed PHP version is below the configured fixed
-//   release for its branch.
-// - "UnknownVersion" means the PHP version could not be parsed reliably.
+// - "Affected" identifies a supported PHP branch below its configured first
+//   fixed release.
+// - "AffectedUnsupported" identifies PHP 5.4 through PHP 8.1. These branches
+//   require an upgrade or an explicitly validated vendor-supplied backport.
+// - "UnknownVersion" means that the observed PHP version could not be parsed.
 // - A result is an investigation lead, not proof of exploitation.
+// - Version-based classification does not determine whether all exploitation
+//   prerequisites are present.
 // - Validate package and vendor patch status before declaring a device
 //   vulnerable. Vendors may backport fixes without adopting the corresponding
 //   upstream PHP version number.
+// - This query observes PHP version metadata in process events. It does not
+//   provide a complete inventory of installed PHP packages.
 // - Confirm suspicious activity using process ancestry, command lines,
-//   file activity, network connections, and other endpoint telemetry.
+//   file activity, network connections, loaded modules, and endpoint telemetry.
 //
 // Compatibility:
 // - Platform: Microsoft Defender XDR Advanced Hunting
 // - Required tables: DeviceInfo, DeviceProcessEvents
-// - Required DeviceInfo fields: Timestamp, DeviceId, IsInternetFacing, PublicIP
-// - Required DeviceProcessEvents fields include PHP version metadata and
-//   process creation telemetry.
+// - Required DeviceInfo fields:
+//      Timestamp, DeviceId, IsInternetFacing, PublicIP
+// - Required DeviceProcessEvents fields include:
+//      Timestamp, DeviceId, DeviceName, FileName, ProcessCommandLine,
+//      ProcessId, FolderPath, SHA1, ReportId,
+//      InitiatingProcessFileName, InitiatingProcessCommandLine,
+//      InitiatingProcessId, InitiatingProcessParentFileName,
+//      InitiatingProcessParentId,
+//      InitiatingProcessVersionInfoProductName,
+//      InitiatingProcessVersionInfoCompanyName,
+//      InitiatingProcessVersionInfoProductVersion
 //
-// Configured minimum fixed releases:
-// - PHP 8.2: 8.2.35
-// - PHP 8.3: 8.3.36
-// - PHP 8.4: 8.4.27
-// - PHP 8.5: 8.5.12
+// Configured affected and fixed releases:
+// - PHP 5.4 through PHP 8.1: affected unsupported branches
+// - PHP 8.2: versions earlier than 8.2.35
+// - PHP 8.3: versions earlier than 8.3.36
+// - PHP 8.4: versions earlier than 8.4.27
+// - PHP 8.5: versions earlier than 8.5.12
 //
-// Author: Rami Mustafa, , Microsoft CSA (rami.mustafa@microsoft.com)
-// Last updated: 2026-10-22
-//Version     : 1.0
+// Correlation:
+// - PHP version observations and shell-spawn events are correlated by DeviceId.
+// - Shell activity must occur between one hour before the first PHP observation
+//   and 24 hours after the last PHP observation.
+// - "DirectPHPToShell" has stronger process-level relevance.
+// - "WebWorkerToShellOnAffectedPHPDevice" is a broader device-level lead.
+//
+// Author: Rami Mustafa, Microsoft CSA (rami.mustafa@microsoft.com)
+// Version: 1.1
+// Last updated: 2026-10-27
 // =============================================================================
+
+// -----------------------------------------------------------------------------
+// Configuration
+// -----------------------------------------------------------------------------
+
 let Lookback = 30d;
+let PreObservationWindow = 1h;
+let PostObservationWindow = 24h;
+
+// Oldest explicitly included affected legacy branch.
+let PHP_AffectedLegacyMinimum = parse_version("5.4.0");
+
+// Supported PHP branches and configured first fixed releases.
 let PHP_82_Minimum = parse_version("8.2.0");
 let PHP_82_Fixed = parse_version("8.2.35");
+
 let PHP_83_Minimum = parse_version("8.3.0");
 let PHP_83_Fixed = parse_version("8.3.36");
+
 let PHP_84_Minimum = parse_version("8.4.0");
 let PHP_84_Fixed = parse_version("8.4.27");
+
 let PHP_85_Minimum = parse_version("8.5.0");
 let PHP_85_Fixed = parse_version("8.5.12");
-let ShellProcesses = dynamic([
-    "sh",
-    "zsh",
-    "dash",
-    "bash",
-    "bash.exe",
-    "cmd.exe",
-    "powershell.exe",
-    "powershell",
-    "pwsh.exe",
-    "pwsh",
-    "node.exe",
-    "node"
+
+// PHP executable names used for version observations and direct correlation.
+let PHPProcesses = dynamic([
+    "php",
+    "php.exe",
+    "php-win.exe",
+    "php-cgi",
+    "php-cgi.exe"
 ]);
+
+// PHP and common web-server worker processes.
 let WebProcesses = dynamic([
     "php",
     "php.exe",
@@ -74,99 +108,317 @@ let WebProcesses = dynamic([
     "httpd.exe",
     "nginx",
     "nginx.exe",
-    "apache2"
+    "apache2",
+    "apache2.exe"
 ]);
+
+// Shells, scripting engines, and frequently abused execution utilities.
+let ShellProcesses = dynamic([
+    "sh",
+    "sh.exe",
+    "zsh",
+    "zsh.exe",
+    "dash",
+    "dash.exe",
+    "bash",
+    "bash.exe",
+    "ksh",
+    "ksh.exe",
+    "cmd",
+    "cmd.exe",
+    "powershell",
+    "powershell.exe",
+    "pwsh",
+    "pwsh.exe",
+    "wscript",
+    "wscript.exe",
+    "cscript",
+    "cscript.exe",
+    "mshta",
+    "mshta.exe",
+    "rundll32",
+    "rundll32.exe",
+    "regsvr32",
+    "regsvr32.exe",
+    "certutil",
+    "certutil.exe",
+    "bitsadmin",
+    "bitsadmin.exe",
+    "curl",
+    "curl.exe",
+    "wget",
+    "wget.exe",
+    "python",
+    "python.exe",
+    "python3",
+    "python3.exe",
+    "perl",
+    "perl.exe",
+    "ruby",
+    "ruby.exe",
+    "node",
+    "node.exe"
+]);
+
+// -----------------------------------------------------------------------------
+// Internet-facing devices
+// -----------------------------------------------------------------------------
+
 let InternetFacingDevices =
     DeviceInfo
     | where Timestamp > ago(Lookback)
-    // Use the most recent DeviceInfo record for each device.
+    // Retain the most recent DeviceInfo record for each device.
     | summarize arg_max(Timestamp, *) by DeviceId
     | where IsInternetFacing == true
     | where isnotempty(PublicIP)
-    | project DeviceId, PublicIP;
+    | project
+        DeviceId,
+        InternetFacingDeviceName = DeviceName,
+        PublicIP,
+        InternetFacingInfoTimestamp = Timestamp;
+
+// -----------------------------------------------------------------------------
+// PHP version observations
+// -----------------------------------------------------------------------------
+
 let PHPVersionObservations =
     DeviceProcessEvents
     | where Timestamp > ago(Lookback)
-    | where DeviceId in (InternetFacingDevices)
-    | where InitiatingProcessVersionInfoProductName =~ "PHP"
-    | where InitiatingProcessVersionInfoCompanyName =~ "The PHP Group"
+    | where DeviceId in (
+        InternetFacingDevices
+        | project DeviceId
+    )
+    // Require evidence indicating that the initiating process is PHP.
+    // Do not require the company-name field because it may be missing or may
+    // differ in vendor-packaged, Linux, or custom PHP distributions.
+    | where InitiatingProcessFileName in~ (PHPProcesses)
+        or InitiatingProcessVersionInfoProductName has "PHP"
+        or InitiatingProcessVersionInfoCompanyName =~ "The PHP Group"
     | extend ObservedPHPVersion =
         tostring(InitiatingProcessVersionInfoProductVersion)
+    // Extract the numeric portion to tolerate metadata such as:
+    // "8.2.35", "8.2.35-1", "PHP 8.2.35", or "8.2.35-custom".
+    | extend NormalizedPHPVersionString =
+        extract(
+            @"(\d+\.\d+(?:\.\d+){0,2})",
+            1,
+            ObservedPHPVersion
+        )
     | extend ParsedPHPVersion =
-        parse_version(ObservedPHPVersion)
+        parse_version(NormalizedPHPVersionString)
     | extend PHPVersionStatus =
         case(
-            isnull(ParsedPHPVersion),
+            isempty(ObservedPHPVersion)
+                or isempty(NormalizedPHPVersionString)
+                or isnull(ParsedPHPVersion),
                 "UnknownVersion",
+
+            // PHP 5.4 through PHP 8.1.
+            ParsedPHPVersion >= PHP_AffectedLegacyMinimum
+                and ParsedPHPVersion < PHP_82_Minimum,
+                "AffectedUnsupported",
+
+            // PHP 8.2 before the configured first fixed release.
             ParsedPHPVersion >= PHP_82_Minimum
                 and ParsedPHPVersion < PHP_82_Fixed,
-                "Vulnerable",
+                "Affected",
+
+            // PHP 8.3 before the configured first fixed release.
             ParsedPHPVersion >= PHP_83_Minimum
                 and ParsedPHPVersion < PHP_83_Fixed,
-                "Vulnerable",
+                "Affected",
+
+            // PHP 8.4 before the configured first fixed release.
             ParsedPHPVersion >= PHP_84_Minimum
                 and ParsedPHPVersion < PHP_84_Fixed,
-                "Vulnerable",
+                "Affected",
+
+            // PHP 8.5 before the configured first fixed release.
             ParsedPHPVersion >= PHP_85_Minimum
                 and ParsedPHPVersion < PHP_85_Fixed,
-                "Vulnerable",
-            "NotMatched"
+                "Affected",
+
+            // Fixed PHP 8.2 branch.
+            ParsedPHPVersion >= PHP_82_Fixed
+                and ParsedPHPVersion < PHP_83_Minimum,
+                "Fixed",
+
+            // Fixed PHP 8.3 branch.
+            ParsedPHPVersion >= PHP_83_Fixed
+                and ParsedPHPVersion < PHP_84_Minimum,
+                "Fixed",
+
+            // Fixed PHP 8.4 branch.
+            ParsedPHPVersion >= PHP_84_Fixed
+                and ParsedPHPVersion < PHP_85_Minimum,
+                "Fixed",
+
+            // Fixed PHP 8.5 branch or a later observed version.
+            ParsedPHPVersion >= PHP_85_Fixed,
+                "Fixed",
+
+            // Includes parseable versions older than PHP 5.4.
+            "UnsupportedUnassessed"
         )
-    // Retain unknown versions for analyst validation.
-    | where PHPVersionStatus in ("Vulnerable", "UnknownVersion")
+    | where PHPVersionStatus in (
+        "Affected",
+        "AffectedUnsupported",
+        "UnknownVersion"
+    )
     | summarize
+        FirstPHPObservation = min(Timestamp),
         LastPHPObservation = max(Timestamp),
         ObservedPHPVersions = make_set(ObservedPHPVersion, 20),
-        PHPVersionStatuses = make_set(PHPVersionStatus, 5)
+        NormalizedPHPVersions = make_set(NormalizedPHPVersionString, 20),
+        PHPVersionStatuses = make_set(PHPVersionStatus, 5),
+        PHPVersionProcessNames = make_set(InitiatingProcessFileName, 10),
+        PHPProductNames =
+            make_set(InitiatingProcessVersionInfoProductName, 10),
+        PHPCompanyNames =
+            make_set(InitiatingProcessVersionInfoCompanyName, 10)
         by DeviceId;
-PHPVersionObservations
-| join kind=inner (
-    InternetFacingDevices
-) on DeviceId
-| join kind=inner (
+
+// -----------------------------------------------------------------------------
+// Shell and scripting-engine processes spawned by PHP or web workers
+// -----------------------------------------------------------------------------
+
+let WebWorkerShellSpawns =
     DeviceProcessEvents
     | where Timestamp > ago(Lookback)
+    | where DeviceId in (
+        InternetFacingDevices
+        | project DeviceId
+    )
     | where InitiatingProcessFileName in~ (WebProcesses)
     | where FileName in~ (ShellProcesses)
+    | extend CorrelationType =
+        iff(
+            InitiatingProcessFileName in~ (PHPProcesses),
+            "DirectPHPToShell",
+            "WebWorkerToShellOnAffectedPHPDevice"
+        )
+    | extend CorrelationStrength =
+        iff(
+            CorrelationType == "DirectPHPToShell",
+            "Higher",
+            "Moderate"
+        )
     | project
         ShellSpawnTimestamp = Timestamp,
         DeviceId,
         DeviceName,
         AccountDomain,
         AccountName,
+        CorrelationType,
+        CorrelationStrength,
         InitiatingProcessFileName,
         InitiatingProcessCommandLine,
         InitiatingProcessId,
         InitiatingProcessParentFileName,
         InitiatingProcessParentId,
+        InitiatingProcessVersionInfoProductName,
+        InitiatingProcessVersionInfoCompanyName,
+        InitiatingProcessVersionInfoProductVersion,
         SpawnedProcessFileName = FileName,
         SpawnedProcessCommandLine = ProcessCommandLine,
         SpawnedProcessId = ProcessId,
         FolderPath,
         SHA1,
-        ReportId
+        ReportId;
+
+// -----------------------------------------------------------------------------
+// Final correlation
+// -----------------------------------------------------------------------------
+
+PHPVersionObservations
+| join kind=inner (
+    InternetFacingDevices
 ) on DeviceId
+| join kind=inner (
+    WebWorkerShellSpawns
+) on DeviceId
+// Reduce unrelated device-level matches by requiring temporal proximity.
+| extend CorrelationWindowStart =
+    FirstPHPObservation - PreObservationWindow,
+    CorrelationWindowEnd =
+    LastPHPObservation + PostObservationWindow
+| where ShellSpawnTimestamp between (
+    CorrelationWindowStart .. CorrelationWindowEnd
+)
+| extend InvestigationPriority =
+    case(
+        CorrelationType == "DirectPHPToShell"
+            and set_has_element(PHPVersionStatuses, "Affected"),
+            "High",
+
+        CorrelationType == "DirectPHPToShell"
+            and set_has_element(
+                PHPVersionStatuses,
+                "AffectedUnsupported"
+            ),
+            "High",
+
+        CorrelationType == "DirectPHPToShell"
+            and set_has_element(PHPVersionStatuses, "UnknownVersion"),
+            "Medium",
+
+        CorrelationType == "WebWorkerToShellOnAffectedPHPDevice"
+            and set_has_element(PHPVersionStatuses, "Affected"),
+            "Medium",
+
+        CorrelationType == "WebWorkerToShellOnAffectedPHPDevice"
+            and set_has_element(
+                PHPVersionStatuses,
+                "AffectedUnsupported"
+            ),
+            "Medium",
+
+        "Low"
+    )
+| extend InvestigationPriorityOrder =
+    case(
+        InvestigationPriority == "High", 1,
+        InvestigationPriority == "Medium", 2,
+        InvestigationPriority == "Low", 3,
+        4
+    )
 | project
     ShellSpawnTimestamp,
+    InvestigationPriority,
+    CorrelationType,
+    CorrelationStrength,
     DeviceName,
     DeviceId,
     PublicIP,
+    InternetFacingInfoTimestamp,
     AccountDomain,
     AccountName,
     ObservedPHPVersions,
+    NormalizedPHPVersions,
     PHPVersionStatuses,
+    FirstPHPObservation,
     LastPHPObservation,
+    CorrelationWindowStart,
+    CorrelationWindowEnd,
+    PHPVersionProcessNames,
+    PHPProductNames,
+    PHPCompanyNames,
     InitiatingProcessFileName,
     InitiatingProcessCommandLine,
     InitiatingProcessId,
     InitiatingProcessParentFileName,
     InitiatingProcessParentId,
+    InitiatingProcessVersionInfoProductName,
+    InitiatingProcessVersionInfoCompanyName,
+    InitiatingProcessVersionInfoProductVersion,
     SpawnedProcessFileName,
     SpawnedProcessCommandLine,
     SpawnedProcessId,
     FolderPath,
     SHA1,
-    ReportId
-| order by ShellSpawnTimestamp desc
-
-
+    ReportId,
+    InvestigationPriorityOrder
+| order by
+    InvestigationPriorityOrder asc,
+    ShellSpawnTimestamp desc
+| project-away InvestigationPriorityOrder
