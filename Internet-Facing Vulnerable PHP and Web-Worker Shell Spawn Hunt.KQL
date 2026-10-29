@@ -188,17 +188,12 @@ let PHPVersionObservations =
         InternetFacingDevices
         | project DeviceId
     )
-    // Require evidence indicating that the initiating process is PHP.
-    // Do not require the company-name field because it may be missing or may
-    // differ in vendor-packaged, Linux, or custom PHP distributions.
-    | where InitiatingProcessFileName in~ (PHPProcesses)
+        | where InitiatingProcessFileName in~ (PHPProcesses)
         or InitiatingProcessVersionInfoProductName has "PHP"
         or InitiatingProcessVersionInfoCompanyName =~ "The PHP Group"
     | extend ObservedPHPVersion =
         tostring(InitiatingProcessVersionInfoProductVersion)
-    // Extract the numeric portion to tolerate metadata such as:
-    // "8.2.35", "8.2.35-1", "PHP 8.2.35", or "8.2.35-custom".
-    | extend NormalizedPHPVersionString =
+      | extend NormalizedPHPVersionString =
         extract(
             @"(\d+\.\d+(?:\.\d+){0,2})",
             1,
@@ -213,52 +208,43 @@ let PHPVersionObservations =
                 or isnull(ParsedPHPVersion),
                 "UnknownVersion",
 
-            // PHP 5.4 through PHP 8.1.
-            ParsedPHPVersion >= PHP_AffectedLegacyMinimum
+               ParsedPHPVersion >= PHP_AffectedLegacyMinimum
                 and ParsedPHPVersion < PHP_82_Minimum,
                 "AffectedUnsupported",
 
-            // PHP 8.2 before the configured first fixed release.
+           
             ParsedPHPVersion >= PHP_82_Minimum
                 and ParsedPHPVersion < PHP_82_Fixed,
                 "Affected",
 
-            // PHP 8.3 before the configured first fixed release.
-            ParsedPHPVersion >= PHP_83_Minimum
+                     ParsedPHPVersion >= PHP_83_Minimum
                 and ParsedPHPVersion < PHP_83_Fixed,
                 "Affected",
 
-            // PHP 8.4 before the configured first fixed release.
-            ParsedPHPVersion >= PHP_84_Minimum
+                      ParsedPHPVersion >= PHP_84_Minimum
                 and ParsedPHPVersion < PHP_84_Fixed,
                 "Affected",
 
-            // PHP 8.5 before the configured first fixed release.
-            ParsedPHPVersion >= PHP_85_Minimum
+                   ParsedPHPVersion >= PHP_85_Minimum
                 and ParsedPHPVersion < PHP_85_Fixed,
                 "Affected",
 
-            // Fixed PHP 8.2 branch.
-            ParsedPHPVersion >= PHP_82_Fixed
+                       ParsedPHPVersion >= PHP_82_Fixed
                 and ParsedPHPVersion < PHP_83_Minimum,
                 "Fixed",
 
-            // Fixed PHP 8.3 branch.
-            ParsedPHPVersion >= PHP_83_Fixed
+                      ParsedPHPVersion >= PHP_83_Fixed
                 and ParsedPHPVersion < PHP_84_Minimum,
                 "Fixed",
 
-            // Fixed PHP 8.4 branch.
-            ParsedPHPVersion >= PHP_84_Fixed
+                  ParsedPHPVersion >= PHP_84_Fixed
                 and ParsedPHPVersion < PHP_85_Minimum,
                 "Fixed",
 
-            // Fixed PHP 8.5 branch or a later observed version.
-            ParsedPHPVersion >= PHP_85_Fixed,
+                        ParsedPHPVersion >= PHP_85_Fixed,
                 "Fixed",
 
-            // Includes parseable versions older than PHP 5.4.
-            "UnsupportedUnassessed"
+                       "UnsupportedUnassessed"
         )
     | where PHPVersionStatus in (
         "Affected",
@@ -337,7 +323,6 @@ PHPVersionObservations
 | join kind=inner (
     WebWorkerShellSpawns
 ) on DeviceId
-// Reduce unrelated device-level matches by requiring temporal proximity.
 | extend CorrelationWindowStart =
     FirstPHPObservation - PreObservationWindow,
     CorrelationWindowEnd =
